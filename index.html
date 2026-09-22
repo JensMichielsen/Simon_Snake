@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1a14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Simon Snake</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="hud">
+      <div class="stat"><span class="label">Score</span><span id="score">0</span></div>
+      <h1>Simon Snake</h1>
+      <div class="stat"><span class="label">Best</span><span id="best">0</span></div>
+    </header>
+
+    <div class="board-wrap">
+      <canvas id="board" aria-label="Snake game board"></canvas>
+
+      <div id="overlay" class="overlay">
+        <h2 id="overlay-title">Simon Snake</h2>
+        <p id="overlay-text">Swipe or use the arrows to steer.<br />Eat the apples, don't bite yourself!</p>
+        <button id="start-btn" class="btn">Play</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="pause-btn" class="small-btn" aria-label="Pause">❚❚</button>
+      <div class="dpad">
+        <button class="dir up" data-dir="up" aria-label="Up">▲</button>
+        <button class="dir left" data-dir="left" aria-label="Left">◀</button>
+        <button class="dir right" data-dir="right" aria-label="Right">▶</button>
+        <button class="dir down" data-dir="down" aria-label="Down">▼</button>
+      </div>
+      <button id="wrap-btn" class="small-btn" aria-label="Toggle walls">Walls</button>
+    </div>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
