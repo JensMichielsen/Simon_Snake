@@ -22,6 +22,9 @@
   const TOWER_MIN_W = 78;
   const TOWER_MAX_W = 104;
   const MAX_GAP_SHIFT = 190; // how far the gap may move between towers
+  const COLLAPSE_DELAY = 0.25; // seconds between impact and the tower starting to sink
+  const COLLAPSE_SINK = 150; // sink distance = COLLAPSE_SINK * t², in units
+  const COLLAPSE_MAX_WAIT = 2.2; // the results card waits at most this long for the collapse
 
   // ---------- DOM ----------
   const gameEl = document.getElementById('game');
@@ -268,6 +271,18 @@
       this.noiseBurst(0.6, 'lowpass', 1200, 80, 0.8);
       this.tone('sine', 140, 40, 0.45, 0.5);
     },
+
+    rumble() {
+      if (!this.ctx || this.muted) return;
+      this.noiseBurst(2.4, 'lowpass', 500, 60, 0.9);
+      this.tone('sine', 62, 28, 2.2, 0.35);
+    },
+
+    thud() {
+      if (!this.ctx || this.muted) return;
+      this.noiseBurst(0.45, 'lowpass', 900, 70, 0.7);
+      this.tone('sine', 90, 35, 0.35, 0.4);
+    },
   };
 
   // ---------- Layout ----------
@@ -371,14 +386,18 @@
     hintEl.classList.remove('hidden');
   }
 
-  function crash() {
+  function crash(tower) {
     state = 'dying';
     deathTimer = 0;
     shake = 14;
     flash = 1;
     audio.crash();
+    if (tower) {
+      tower.collapse = { t: 0, sink: 0, drop: 0, fallV: 0, landed: false, done: false, tilt: pick([-1, 1]) };
+      audio.rumble();
+    }
     try {
-      if (navigator.vibrate) navigator.vibrate(120);
+      if (navigator.vibrate) navigator.vibrate(tower ? [120, 80, 400] : 120);
     } catch {
       /* vibration not allowed here */
     }
@@ -440,7 +459,9 @@
       color: pick(TOWER_COLORS),
       style: pick(TOWER_STYLES),
       seed: (Math.random() * 1e9) | 0,
+      roofY: -Math.round(rand(140, 260)), // the upper section's roof, normally off screen
       scored: false,
+      collapse: null,
     };
   }
 
@@ -460,10 +481,11 @@
     ];
   }
 
-  function collides() {
+  // Returns the tower the plane hit, 'ground', or null.
+  function collision() {
     const circles = hitCircles();
     for (const [cx, cy, r] of circles) {
-      if (cy + r >= GROUND_Y) return true;
+      if (cy + r >= GROUND_Y) return 'ground';
     }
     for (const t of towers) {
       if (t.x > plane.x + 40 || t.x + t.w < plane.x - 40) continue;
@@ -472,11 +494,73 @@
       const gapTop = t.gapY - t.gap / 2;
       const gapBot = t.gapY + t.gap / 2;
       for (const [cx, cy, r] of circles) {
-        if (circleHitsRect(cx, cy, r, x0, -1000, x1, gapTop + 2)) return true;
-        if (circleHitsRect(cx, cy, r, x0, gapBot + 2, x1, GROUND_Y)) return true;
+        if (circleHitsRect(cx, cy, r, x0, -1000, x1, gapTop + 2)) return t;
+        if (circleHitsRect(cx, cy, r, x0, gapBot + 2, x1, GROUND_Y)) return t;
       }
     }
-    return false;
+    return null;
+  }
+
+  // The hit tower drops its upper section onto the lower one, then the whole
+  // thing sinks into the street in a cloud of dust.
+  function updateCollapse(t, dt) {
+    const c = t.collapse;
+    if (c.done) return;
+    c.t += dt;
+    const gapTop = t.gapY - t.gap / 2;
+    const gapBot = t.gapY + t.gap / 2;
+    const st = Math.max(0, c.t - COLLAPSE_DELAY);
+    c.sink = COLLAPSE_SINK * st * st;
+
+    const rest = gapBot + c.sink - gapTop; // drop at which the upper section sits on the lower
+    if (c.landed) {
+      c.drop = rest;
+    } else {
+      c.fallV += GRAVITY * dt;
+      c.drop += c.fallV * dt;
+      if (c.drop >= rest) {
+        c.drop = rest;
+        c.landed = true;
+        shake = Math.max(shake, 9);
+        audio.thud();
+        const y = Math.min(GROUND_Y, gapBot + c.sink);
+        for (let i = 0; i < 16; i++) {
+          const side = i % 2 ? 1 : -1;
+          particles.push(dust(side > 0 ? t.x + t.w : t.x, y + rand(-8, 8), side * rand(40, 140), rand(-30, 10)));
+        }
+        for (let i = 0; i < 10; i++) particles.push(debris(t, rand(t.x, t.x + t.w), y));
+      }
+    }
+
+    if (st > 0) {
+      shake = Math.max(shake, 3.5);
+      // Spawn at a steady rate per second rather than per step.
+      c.emit = (c.emit || 0) + dt;
+      while (c.emit > 1 / 40) {
+        c.emit -= 1 / 40;
+        const x = rand(t.x - 6, t.x + t.w + 6);
+        const away = x - (t.x + t.w / 2);
+        particles.push(dust(x, GROUND_Y - rand(0, 24), away * rand(1, 2.4), rand(-50, -10)));
+        if (Math.random() < 0.7) particles.push(debris(t, x, GROUND_Y - rand(0, 10)));
+      }
+    }
+    if (t.roofY + c.drop > GROUND_Y + 40) c.done = true;
+  }
+
+  function dust(x, y, vx, vy) {
+    return {
+      x, y, vx, vy,
+      r: rand(10, 20), grow: rand(18, 32), life: 0, max: rand(1.2, 2.2),
+      color: mix([196, 184, 162], [86, 86, 102], pal.night), alpha: 0.55,
+    };
+  }
+
+  function debris(t, x, y) {
+    return {
+      x, y, vx: rand(-130, 130), vy: rand(-280, -90),
+      r: rand(1.5, 3.5), grow: 0, life: 0, max: rand(0.6, 1.1),
+      color: mix(t.color, [20, 20, 30], 0.35 + pal.night * 0.3), alpha: 1, gravity: 900, square: true,
+    };
   }
 
   // ---------- Update ----------
@@ -532,7 +616,8 @@
         });
       }
 
-      if (collides()) crash();
+      const hit = collision();
+      if (hit) crash(hit === 'ground' ? null : hit);
     } else if (state === 'dying') {
       deathTimer += dt;
       if (!plane.grounded) {
@@ -556,8 +641,11 @@
           color: [60, 60, 70], alpha: 0.55,
         });
       }
-      if (plane.grounded && deathTimer > 0.8) gameOver();
+      const collapsing = towers.some((t) => t.collapse && !t.collapse.done && t.collapse.t < COLLAPSE_MAX_WAIT);
+      if (plane.grounded && deathTimer > 0.8 && !collapsing) gameOver();
     }
+
+    for (const t of towers) if (t.collapse) updateCollapse(t, dt);
 
     for (const p of particles) {
       p.life += dt;
@@ -679,8 +767,50 @@
     const body = mix(t.color, NIGHT_TINT, pal.night * 0.6);
     const gapTop = t.gapY - t.gap / 2;
     const gapBot = t.gapY + t.gap / 2;
-    drawTowerPart(t, body, -20, gapTop, true);
+    const c = t.collapse;
+    if (!c) {
+      drawTowerPart(t, body, -20, gapTop, true);
+      drawTowerPart(t, body, gapBot, GROUND_Y, false);
+      return;
+    }
+    if (c.done) return;
+    ctx.save();
+    // Hide whatever has sunk below street level.
+    ctx.beginPath();
+    ctx.rect(-50, -1000, W + 100, GROUND_Y + 1000);
+    ctx.clip();
+    // Lean a little and shudder while it goes down.
+    const cx = t.x + t.w / 2;
+    ctx.translate(cx + Math.sin(time * 55) * 1.5, GROUND_Y);
+    ctx.rotate(c.tilt * Math.min(0.08, c.t * 0.04));
+    ctx.translate(-cx, -GROUND_Y);
+    ctx.save();
+    ctx.translate(0, c.sink);
     drawTowerPart(t, body, gapBot, GROUND_Y, false);
+    ctx.restore();
+    ctx.translate(0, c.drop);
+    drawTowerPart(t, body, t.roofY, gapTop, true);
+    drawRoof(t, body, t.roofY, true, false);
+    ctx.restore();
+  }
+
+  function drawRoof(t, body, y, spire, powered) {
+    const { x, w } = t;
+    const light = powered && Math.sin(time * 4 + t.seed) > 0.2 ? '#ff4d4d' : '#7a1f1f';
+    if (spire) {
+      ctx.fillStyle = rgb(mix(body, [0, 0, 0], 0.35));
+      ctx.fillRect(x + w / 2 - 1.5, y - 44, 3, 44);
+      ctx.fillRect(x + w / 2 - 8, y - 12, 16, 12);
+      ctx.fillStyle = light;
+      ctx.fillRect(x + w / 2 - 2, y - 48, 4, 4);
+    }
+    ctx.fillStyle = rgb(mix(body, [255, 255, 255], 0.25));
+    ctx.fillRect(x, y, w, 6);
+    ctx.fillStyle = rgb(mix(body, [0, 0, 0], 0.3));
+    ctx.fillRect(x, y + 6, w, 4);
+    ctx.fillStyle = light;
+    ctx.fillRect(x + 3, y + 1, 4, 4);
+    ctx.fillRect(x + w - 7, y + 1, 4, 4);
   }
 
   function drawTowerPart(t, body, y0, y1, isTop) {
@@ -698,9 +828,11 @@
 
     const glass = mix(mix(pal.skyBot, body, 0.45), [20, 26, 44], 0.25 + night * 0.4);
     const lit = mix(LIT_DAY, LIT_NIGHT, night);
-    const litChance = 0.1 + 0.5 * night;
+    // A collapsing tower's lights flicker, then the power goes out.
+    const powered = !t.collapse || (t.collapse.t < 0.4 && Math.sin(time * 47) > 0);
+    const litChance = powered ? 0.1 + 0.5 * night : 0;
     const rowH = 20;
-    const innerTop = y0 + (isTop ? 6 : 16);
+    const innerTop = y0 + 16;
     const innerBot = y1 - (isTop ? 18 : 22);
     // Rows are measured up from the ground so both halves line up as one building.
     // Row r spans [GROUND_Y - (r + 1) * rowH, + 12]; keep it inside innerTop..innerBot.
@@ -762,7 +894,7 @@
       }
     }
 
-    const blink = Math.sin(time * 4 + t.seed) > 0.2;
+    const blink = powered && Math.sin(time * 4 + t.seed) > 0.2;
     if (isTop) {
       // Underside of the upper section: a steel beam with warning lights.
       ctx.fillStyle = rgb(mix(body, [30, 34, 48], 0.5));
@@ -783,17 +915,11 @@
       ctx.fillRect(x + w - 8, y1 - 4, 4, 4);
     } else {
       // Rooftop parapet with aircraft warning lights.
-      ctx.fillStyle = rgb(mix(body, [255, 255, 255], 0.25));
-      ctx.fillRect(x, y0, w, 6);
-      ctx.fillStyle = rgb(mix(body, [0, 0, 0], 0.3));
-      ctx.fillRect(x, y0 + 6, w, 4);
-      ctx.fillStyle = blink ? '#ff4d4d' : '#7a1f1f';
-      ctx.fillRect(x + 3, y0 + 1, 4, 4);
-      ctx.fillRect(x + w - 7, y0 + 1, 4, 4);
+      drawRoof(t, body, y0, false, powered);
       // Street-level entrance.
       ctx.fillStyle = rgb(mix(body, [0, 0, 0], 0.45));
       ctx.fillRect(x + w / 2 - 9, y1 - 16, 18, 16);
-      ctx.fillStyle = rgb(lit, 0.6 + night * 0.4);
+      ctx.fillStyle = powered ? rgb(lit, 0.6 + night * 0.4) : rgb(glass);
       ctx.fillRect(x + w / 2 - 7, y1 - 14, 6, 14);
       ctx.fillRect(x + w / 2 + 1, y1 - 14, 6, 14);
     }
@@ -820,6 +946,10 @@
     for (const p of particles) {
       const fade = 1 - p.life / p.max;
       ctx.fillStyle = rgb(p.color, p.alpha * fade);
+      if (p.square) {
+        ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+        continue;
+      }
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fill();
