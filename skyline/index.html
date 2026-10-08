@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1230" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Skyline Flyer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game" class="game">
+    <canvas id="view" aria-label="Skyline Flyer game"></canvas>
+
+    <div id="score" class="score hidden">0</div>
+    <button id="pause-btn" class="icon-btn pause hidden" aria-label="Pause">❚❚</button>
+    <button id="mute-btn" class="icon-btn mute" aria-label="Mute">🔊</button>
+
+    <div id="title" class="title">
+      <h1>Skyline<br />Flyer</h1>
+      <p id="title-best" class="title-best"></p>
+    </div>
+    <p id="hint" class="hint">Tap to take off</p>
+
+    <div id="panel" class="panel hidden">
+      <h2 id="panel-title">Crashed!</h2>
+      <div id="panel-scores" class="panel-scores">
+        <div><span>Score</span><b id="final-score">0</b></div>
+        <div><span>Best</span><b id="final-best">0</b></div>
+      </div>
+      <p id="new-best" class="badge hidden">New best!</p>
+      <button id="panel-btn" class="btn">Fly again</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

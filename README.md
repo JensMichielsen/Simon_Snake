@@ -19,3 +19,7 @@ npx serve .   # or: python3 -m http.server
 - **Walls / Wrap** switches between hitting the walls and wrapping around the edges. You can change it between games.
 
 The snake speeds up with every apple. Your best score is saved on the device.
+
+## Also in this repo
+
+- [Skyline Flyer](skyline/): a Flappy Bird–style game where you fly a plane through the gaps in skyscrapers.
