@@ -272,8 +272,10 @@
 
   // ---------- Layout ----------
   function resize() {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    // Measure the page body rather than the window: some hosts pad the page
+    // for the phone's notch and home bar.
+    const vw = document.body.clientWidth || window.innerWidth;
+    const vh = document.body.clientHeight || window.innerHeight;
     scale = vh / H;
     W = Math.min(MAX_W, vw / scale);
     const cssW = W * scale;
@@ -375,7 +377,11 @@
     shake = 14;
     flash = 1;
     audio.crash();
-    if (navigator.vibrate) navigator.vibrate(120);
+    try {
+      if (navigator.vibrate) navigator.vibrate(120);
+    } catch {
+      /* vibration not allowed here */
+    }
     pauseBtn.classList.add('hidden');
     for (let i = 0; i < 26; i++) {
       const a = Math.random() * Math.PI * 2;
