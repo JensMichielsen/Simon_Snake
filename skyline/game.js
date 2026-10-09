@@ -198,6 +198,7 @@
     ctx: null,
     master: null,
     noise: null,
+    scream: null, // decoded crash scream, null until ready
     muted: storage.get('skylineFlyer.muted', false),
 
     unlock() {
@@ -212,8 +213,26 @@
         this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
         const data = this.noise.getChannelData(0);
         for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+        this.loadScream();
       }
       if (this.ctx.state === 'suspended') this.ctx.resume();
+    },
+
+    loadScream() {
+      if (!window.SCREAM_MP3_B64) return;
+      try {
+        const bin = atob(window.SCREAM_MP3_B64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const done = (buf) => {
+          this.scream = buf;
+        };
+        // Older Safari only has the callback form of decodeAudioData.
+        const p = this.ctx.decodeAudioData(bytes.buffer, done, () => {});
+        if (p && p.catch) p.catch(() => {});
+      } catch {
+        /* no scream; the explosion sound still plays */
+      }
     },
 
     setMuted(m) {
@@ -270,6 +289,14 @@
       if (!this.ctx || this.muted) return;
       this.noiseBurst(0.6, 'lowpass', 1200, 80, 0.8);
       this.tone('sine', 140, 40, 0.45, 0.5);
+      if (this.scream) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.scream;
+        const g = this.ctx.createGain();
+        g.gain.value = 0.9;
+        src.connect(g).connect(this.master);
+        src.start();
+      }
     },
 
     rumble() {
