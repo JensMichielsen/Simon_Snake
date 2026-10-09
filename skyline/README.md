@@ -16,7 +16,7 @@ On a phone, "Add to Home Screen" gives you a full-screen app.
 
 - **Tap** anywhere (or press Space / ↑) to climb.
 - **❚❚** (or P / Esc) pauses. The game pauses by itself when you switch apps, and after resuming it waits for your next tap.
-- **🔊** (or M) toggles sound.
+- **🔊** (or M) toggles sound. Crashing plays a scream.
 
 ## How it plays
 
